@@ -1,0 +1,968 @@
+---
+title: "An Exoplanet Case Study"
+author: "William Bentley, Ishmael Gravatt"
+date: "April 26, 2019"
+output:
+  ioslides_presentation: default
+  slidy_presentation: default
+  css: https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+options(scipen = 999)
+```
+```{r libraries, include = F}
+library(tidyverse)
+library(hflights)
+library(magrittr)
+library(scales)
+library(reshape2)
+library(gcookbook)
+library(plotly)
+library(ggforce)
+library(gridExtra)
+library(kableExtra)
+
+
+planetDf <- read_csv("exoplanet.eu_catalog.csv")
+
+G <- planetDf %>%
+  count(star_sp_type)%>%
+    filter(n >= 2) %>%
+      mutate(star_Spectral = substr(star_sp_type, 0, 1)) %>%
+        select(star_sp_type, star_Spectral) %>%
+          filter(star_Spectral == "A" | star_Spectral == "B" |
+                 star_Spectral == "O" | star_Spectral == "F" |
+                 star_Spectral == "G" | star_Spectral == "K" |
+                 star_Spectral == "M")
+       
+      
+
+planetDf <- left_join(planetDf, G, by = "star_sp_type")
+
+```
+
+## Introduction to our Data
+
+
+- What kind of data did you analyze? 
+    + We decided to look at confirmed exoplanet data. 
+    
+- We obtained our data from the following link: http://exoplanet.eu/catalog/
+
+- Why does it interest us? 
+   + The study of Exoplanets is essential to understanding our place in the universe as we know it. By studying exoplanets, we can develop a greater understanding of planetary systems, and potentially find other earth-like planets capable of sustaining life.
+
+
+## Introduction Continued
+
+- Our data contains `r nrow(planetDf)` rows and `r ncol(planetDf)` columns.
+    + Total number of observations is `r nrow(planetDf) * ncol(planetDf)`.
+- Our data also contains `r sum(is.na(planetDf))` NA values. 
+- Parsing and cleaning data: 
+    + Selected the columns in the dataframe that were applicable to the specific analysis before starting to plot using dplyr.     
+    + Filtered out rows with non-sensical values in uncertainty.
+    + Finally, we omitted rows with any NA values. 
+    
+## Introduction Continued
+
+- Parsing and cleaning data continued:
+    + We also parsed down spectral classification to overall spectral type (i.e. A1V to just A) and filtered by the main Morgan-Keenan types. 
+    + Joined this data to main data frame. 
+
+## Exploratory Analysis  
+
+- **Overview of Thesis**
+    + *Methods of Detection and Parameters*
+        + We first aim to analyze the method of exoplanet detection. First, we predict that most planets detected will have been discovered by either the transit or radial velocity method, which we believe are the most used methods.
+        + We also predict that exoplanet detection has seen exponential growth since the first planet was detected.
+        
+        
+## Exploratory Analysis Continued
+
+- **Overview of Thesis Continued**
+    + *Methods of Detection and Parameters Continued*
+        + Orbiting planets cause slight movements from their sun, which changes the color of the light (color signature) observed by astronomers. The radial velocity method uses this change in color signature to determine if a star has orbiting planets. We assume this method will be effective mainly at targeting planets with very large masses, because they have a greater impact on their star's movement. 
+        + Similar to an eclipse, when a planet passes directly between its star and an observer, it dims the stars light by a measurable amount. This is how we detect planets using the transit method. Because transit only lasts a short period of time, we assume it will be limited in detecting planets with very small orbital periods. 
+
+## Exploratory Analysis Continued
+
+- **Overview of Thesis Continued**
+    + *Planet Parameters*
+        + As density is $\rho = \frac{m}{\frac{4}{3}\pi(r^3)}$ we predict most exoplanets detected will be low density gas giant planets, in lieu of rocky Earth type worlds. Therefore, in our analysis we should see planets with large masses correlated to also have large radii.
+        + Using the solar system as a guide, we predict that massive planets should have large orbital periods, with smaller rocky type worlds having shorter orbital periods. 
+
+## Exploratory Analysis Continued
+
+- **Overview of Thesis Continued**
+    + *Planet Parameters Continued*
+        + We also predict that we should see a correlation between orbital period and semi major axis as they're related (Keplers Third Law) by $T^2 \propto a^3$.
+        + Since Newtons gravitation says $F = \frac{m_1 m_2}{r^2}$ and the spectral class of a star is based on in part it's mass, we expect orbital periods to correlate to spectral class, since planets orbiting smaller or larger stars compared to the sun will have smaller or larger orbits respectfully.
+        
+        
+## Exploratory Analysis Continued
+
+- **Overview of Thesis Continued**
+    + *Planet Parameters Continued*
+        + We predict that larger star masses will lead to systems with more planets, as they will exert a stronger gravitational force on their surroundings and likely formed from more initial material. 
+        + Using the solar system as a guide, we assume sun sized host stars and larger will result in nearly flat orbital inclinations, and that smaller star classes will result in greater orbital inclinations. 
+        
+## Exploratory Analysis Continued
+
+- **Overview of Thesis Continued**
+    + *Planet Parameters Continued*
+        + Using the solar system as a guide, we surmise that most exoplanets will have very little eccentricity, so that their orbits are more circular than elliptical. Further, we predict planets that are closer to their star will have greater eccentricities than those further away. 
+        
+## Exploratory Analysis Continued
+- What are the most used methods in exoplanet detection? 
+    + We predict radial velocity and primary transit will be the most used methods.
+    
+## Exploratory Analysis Continued
+![Some Exoplanet Detection Methods.](detection.png)
+
+## Exploratory Analysis Continued
+- *Background*
+    + Radial Velocity: 
+        + Planets interact with their stars in a fashion similar to a game of tug-of-war. Stars are extremely massive in comparison to planets, with a stronger gravitational pull. Planets are significantly less massive than their stars, with a much weaker gravitational pull. Even though the gravitational force from planets is significantly smaller, they still impact their host star, causing very slight movements, or "wobbles" that be can be detected on Earth.
+        
+## Exploratory Analysis Continued
+- *Background Continued* 
+    + Transit Method: 
+        + When a planet passes directly between the star it orbits and an observer, it blocks some of that star's light. For a short time, this causes the star to become dimmer. This small change is enough for astronomers to detect an exoplanet around a star. 
+
+## Exploratory Analysis Continued
+
+```{r}
+detectionMethodTypeAll <- planetDf %>%  
+  ggplot(aes(x = detection_type)) +  
+  geom_bar(fill = "orangered", alpha = .7) +  
+  theme(axis.text.x = element_text(face = "bold", size = 8, angle = 45)) +
+  xlab("\nDetection Method") +  
+  ylab("Number of Detections\n") +
+  ggtitle("Detection Methods vs Number of Detections \n")
+
+  ggplotly(detectionMethodTypeAll)
+```
+
+
+## Exploratory Analysis Continued
+```{r}
+detectionStat <- planetDf %>%
+  count(detection_type) %>%
+      arrange(desc(n)) %>%
+    rename("Detection Number" = n, "Detection Type"= detection_type) 
+```
+
+- Radial velocity and Primary Transit are the two most used methods. 
+
+```{r}
+kable(detectionStat, "html", booktabs = T) %>%
+  kable_styling(position = "center")
+```
+
+## Exploratory Analysis Continued
+- Do we see an exponential growth in exoplanet detection based on the two primary methods of detection? 
+    + We predict that we should see nearly exponential growth after the first exoplanet discovery. 
+
+## Exploratory Analysis Continued
+
+```{r}
+# Cleaning data to be plotted
+detectionYear <- planetDf %>%
+  select(detection_type, discovered) %>%
+  filter(detection_type == "Primary Transit"| 
+         detection_type == "Radial Velocity") %>%
+  na.omit()
+
+# Plotting data
+
+dateDetectPlot <- ggplot(detectionYear, 
+                         aes(x = discovered, fill = detection_type)) +  
+   geom_bar() +  
+   scale_fill_brewer(palette = "Pastel1", direction = -1, 
+                     name = "Detection Method")+  
+   xlab("\nYear Discovered")+  
+   ylab("Number of Detections\n") +
+   ggtitle("Year of Discovery vs Number of Detections\n")
+   
+ggplotly(dateDetectPlot)
+```
+
+## Exploratory Analysis Continued
+- So there isn't an exponential growth in exoplanet detection. 
+    + It appears that exoplanet detection steadly increased from the 2000's, and transit method detections exploded in the early 2010's before slowing again in late the late 2010's. 
+        + This is likely due to the Kepler Mission, which caused a flood of exoplanet confirmations early in its lifespan. However, the data appears mostly mined of exoplanets judging from the rate of confirmations in the past few years using the primary transit method. Although, there are many potential exoplanets discovered by Kepler that have yet to be explicitly confirmed, so this could change. 
+        
+## Exploratory Analysis Continued
+- How are the detection methods biased? 
+  - We predict that the radial velocity method will show more massive planets than the transit method, while we also predict that the transit method will be biased towards planets with short orbital periods.
+  
+## Exploratory Analysis Continued
+- *Background*
+    + Mass is how much "stuff" there is.
+    + Orbital Period is how long it takes a planet to complete one revolution around it's star.
+
+## Exploratory Analysis Continued 
+
+![Star Spectral Classes](morgan.png)
+
+
+## Exploratory Analysis Continued 
+
+```{r}
+# Cleaning data to be plotted
+dataFrameMassOrbital <- planetDf %>%
+  select(star_Spectral, orbital_period, detection_type, mass, mass_error_max, 
+         mass_error_min, orbital_period_error_max, 
+         orbital_period_error_min)%>%
+    filter(mass_error_min & mass_error_max &
+           orbital_period_error_min & orbital_period_error_max > 0 &
+           mass_error_min & mass_error_max &
+           orbital_period_error_min & orbital_period_error_max < 10^100 &
+           orbital_period > orbital_period_error_min &
+           mass > mass_error_min &
+           detection_type == "Primary Transit") %>%
+      na.omit()
+
+# Finding Mean and Medians 
+
+meanOrbitalMassP <- dataFrameMassOrbital %>%
+    group_by(star_Spectral) %>%
+    summarise(meanOrbit = mean(orbital_period), 
+              meanMass = mean(mass/.00315),
+              medianOrbit = median(orbital_period),
+              medianMass = median(mass/.00315))
+
+# Plotting Data
+orbitalMassPlot <- ggplot(dataFrameMassOrbital, aes(x = mass/.00315, 
+                               y = orbital_period, 
+                               fill = star_Spectral)) +
+  geom_point(shape = 21) +
+  geom_errorbar(aes(ymin = (orbital_period) -  
+                              (orbital_period_error_min), 
+                       ymax = (orbital_period) + 
+                              (orbital_period_error_max)), size = 1,
+                   alpha = .4, show.legend = F, color = "Grey45") + 
+  geom_errorbarh(aes(xmin = (mass/.00315) - 
+                               (mass_error_min/.00315), 
+                        xmax = (mass/.00315) + 
+                               (mass_error_max/.00315)),
+                    size = 1, alpha = .4, show.legend = F, color = 
+                    "Grey45") +
+  geom_point(data = meanOrbitalMassP, aes(x = meanMass, y = meanOrbit, 
+                                 fill = star_Spectral), shape = 25, 
+             size = 3, show.legend = F) +
+  geom_point(data = meanOrbitalMassP, aes(x = medianMass, y = medianOrbit, 
+                                 fill = star_Spectral), 
+             shape = 23, size = 3, show.legend = F) +
+  scale_x_continuous(trans = "log10", breaks = c(1, 10, 1000, 100000)) +
+  scale_y_continuous(trans = "log10", breaks = c(1, 10, 1000, 100000)) +
+  xlab("\nMass (Relative to Earth)") +
+  ylab("Orbital Period (Days)\n") +
+  ggtitle("Mass vs Orbital Period of Exoplanets by Spectral Class\nFiltered By detection method = Primary Transit") 
+
+ggplotly(orbitalMassPlot) %>%
+  layout(legend = list(x = 0.01, y = 0.95), annotations = 
+  list(x = 1, y = 0, text = "||Inverted Triangles = Mean || Diamonds = Median||", 
+  showarrow = F, xref='paper', yref='paper', 
+  xanchor='right', yanchor='auto', xshift=0, yshift=0,
+  font=list(size=13, color="Black")))
+
+```
+
+## Exploratory Analysis Continued
+
+```{r}
+# Cleaning data to be plotted
+dataFrameMassOrbital <- planetDf %>%
+  select(star_Spectral, orbital_period, detection_type, mass, mass_error_max, 
+         mass_error_min, orbital_period_error_max, 
+         orbital_period_error_min)%>%
+    filter(mass_error_min & mass_error_max &
+           orbital_period_error_min & orbital_period_error_max > 0 &
+           mass_error_min & mass_error_max &
+           orbital_period_error_min & orbital_period_error_max < 10^100 &
+           orbital_period > orbital_period_error_min &
+           mass > mass_error_min & 
+           detection_type == "Radial Velocity") %>%
+      na.omit()
+
+# Finding Mean and Medians 
+
+meanOrbitalMassR <- dataFrameMassOrbital %>%
+    group_by(star_Spectral) %>%
+    summarise(meanOrbit = mean(orbital_period), 
+              meanMass = mean(mass/.00315),
+              medianOrbit = median(orbital_period),
+              medianMass = median(mass/.00315))
+
+# Plotting Data
+orbitalMassPlot <- ggplot(dataFrameMassOrbital, aes(x = mass/.00315, 
+                               y = orbital_period, 
+                               fill = star_Spectral)) +
+  geom_point(shape = 21) +
+  geom_errorbar(aes(ymin = (orbital_period) -  
+                              (orbital_period_error_min), 
+                       ymax = (orbital_period) + 
+                              orbital_period_error_max), size = 1,
+                   alpha = .4, color = "Grey45", show.legend = F) + 
+  geom_errorbarh(aes(xmin = (mass/.00315) - 
+                               (mass_error_min/.00315), 
+                        xmax = (mass/.00315) + 
+                               (mass_error_max/.00315)),
+                    size = 1, alpha = .4, color = "Grey45", show.legend = F) +
+  geom_point(data = meanOrbitalMassR, aes(x = meanMass, y = meanOrbit, 
+                                 fill = star_Spectral), shape = 25, 
+             size = 3, show.legend = F) +
+  geom_point(data = meanOrbitalMassR, aes(x = medianMass, y = medianOrbit, 
+                                 fill = star_Spectral), 
+             shape = 23, size = 3, show.legend = F) +
+  scale_x_continuous(trans = "log10", breaks = c(1, 10, 1000, 100000)) +
+  scale_y_continuous(trans = "log10", breaks = c(1, 10, 1000, 100000)) +
+  xlab("\nMass (Relative to Earth)") +
+  ylab("Orbital Period (Days)\n") +
+  ggtitle("Mass vs Orbital Period of Exoplanets by Spectral Class\nFiltered by detection method = Radial Velocity")   
+
+ggplotly(orbitalMassPlot) %>%
+  layout(legend = list(x = 0.01, y = 0.95), annotations = 
+  list(x = 1, y = 0, text = "||Inverted Triangles = Mean || Diamonds = Median||", 
+  showarrow = F, xref='paper', yref='paper', 
+  xanchor='right', yanchor='auto', xshift=0, yshift=0,
+  font=list(size=13, color="Black")))
+
+```
+
+## Exploratory Analysis Continued
+```{r}
+meanOrbitalRadial <- meanOrbitalMassR %>%
+  rename("Star Spectral, Radial Velocity" = star_Spectral, "Mean Orbit (Days)" = meanOrbit, "Mean Mass (Earth masses)" = meanMass, "Median Orbit (Days)" = medianOrbit, "Median Mass (Earth masses)" = medianMass)
+
+meanOrbitalTransit <- meanOrbitalMassP %>%
+    rename("Star Spectral, Transit Method" = star_Spectral, "Mean Orbit (Days)" = meanOrbit, "Mean Mass (Earth masses)" = meanMass, "Median Orbit (Days)" = medianOrbit, "Median Mass (Earth masses)" = medianMass) 
+
+kable(meanOrbitalRadial, "html", booktabs = T) %>%
+  kable_styling(position = "center")
+
+kable(meanOrbitalTransit, "html", booktabs = T) %>%
+  kable_styling(position = "center")
+```
+
+## Exploratory Analysis Continued
+
+- Radial velocity does seem biased towards massive planets, while the transit method does seem biased towards shorter orbital periods.
+- Mass doesn't appear to correlate with orbital periods. Both massive and smaller mass planets seem to have a variety of orbital periods both long and short.  
+
+## Exploratory Analysis Continued
+
+- How does a planets mass correlate with it's radius or it's density? 
+    + We predict that a exoplanets mass will correlate positively with it's radius.  
+    + We also predict that most exoplanets will be around the density of Jupiter. 
+
+## Exploratory Analysis Continued
+- *Background* 
+    + The radius of a planet is a line drawn from it's center to it's outer edge. 
+    + Density in this case is $\rho = \frac{m}{\frac{4}{3}\pi(r^3)}$ or $\rho = m/V$. Basically tells you how much "stuff" per unit volume. 
+
+## Exploratory Analysis Continued
+
+```{r}
+
+#cleaned Data
+dataFrameRadius <- planetDf %>%
+  filter(detection_type == "Primary Transit"| 
+        detection_type == "Radial Velocity") %>%
+  select(mass, mass_error_min, mass_error_max,
+         radius, radius_error_max, radius_error_min, detection_type)%>%
+    filter(radius_error_max & radius_error_min &
+             mass_error_max & mass_error_min > 0  & 
+             radius_error_min & radius_error_min &
+             mass_error_max & mass_error_min < 10^100 &
+             mass > mass_error_min 
+           & radius > radius_error_min) %>%
+      na.omit() 
+
+# Finding Mean and Median
+
+meanRadiusDf <- dataFrameRadius %>%
+    group_by(detection_type) %>%
+    summarise(meanRadius = mean(radius * 11.2), 
+              meanMass = mean(mass/.00315),
+              medianDensity = median(radius * 11.2),
+              medianMass = median(mass/.00315))
+
+
+#plotting
+radiiPlot <- ggplot(dataFrameRadius, aes(x = mass/.00315, 
+                            y = radius * 11.2, 
+                            fill = detection_type)) +
+geom_point(shape = 21) +  
+geom_errorbar(aes(ymin = (radius * 11.2) -  
+                              (radius_error_min * 11.2), 
+                       ymax = (radius * 11.2) + 
+                              radius_error_max * 11.2), size = 1,
+                   alpha = .4, show.legend = FALSE, 
+              color = "Grey45") + 
+geom_errorbarh(aes(xmin = (mass/.00315) - 
+                               (mass_error_min/.00315), 
+                        xmax = (mass/.00315) + 
+                               (mass_error_max/.00315)),
+                    size = 1, alpha = .4, show.legend = FALSE,
+                    color = "Grey45") +
+geom_point(data = meanRadiusDf, aes(x = meanMass, y = meanRadius, 
+                                 fill = detection_type), shape = 25, 
+             size = 3, show.legend = F) +
+geom_point(data = meanRadiusDf, aes(x = medianMass, y = meanRadius, 
+                                 fill = detection_type), 
+             shape = 23, size = 3, show.legend = F) +
+scale_fill_brewer(palette = "Set2", name = "Detection Type") +
+scale_x_continuous(trans = "log10") + 
+scale_y_continuous(trans = "log10") +  
+ylab("Radius (Relative to Earth) \n") + 
+xlab("\nMass (Relative to Earth)") +
+ggtitle("Planet Mass vs Radius by Detection Method\n") 
+
+ggplotly(radiiPlot) %>%
+  layout(legend = list(x = 0.01, y = 0.95), annotations = 
+  list(x = 1, y = 0, text = "||Inverted Triangles = Mean || Diamonds = Median||", 
+  showarrow = F, xref='paper', yref='paper', 
+  xanchor='right', yanchor='auto', xshift=0, yshift=0,
+  font=list(size=13, color="Black")))
+
+```
+
+
+## Exploratory Analysis Continued
+
+```{r}
+# Cleaning data for this plot
+
+dataFrameDensity <- planetDf %>%
+  select(star_Spectral, mass, mass_error_min, mass_error_max,
+         radius, radius_error_max, radius_error_min)%>%
+    filter(radius_error_max & radius_error_min &
+             mass_error_max & mass_error_min > 0  & 
+             radius_error_min & radius_error_min &
+             mass_error_max & mass_error_min < 10^100 &
+             mass > mass_error_min 
+           & radius > radius_error_min) %>%
+      na.omit() 
+
+# Finding Mean and Median
+meanDen <- dataFrameDensity %>%
+    group_by(star_Spectral) %>%
+    summarise(meanDensity = mean((mass * 1.9 * 10^30)/((4/3) * 
+                                  pi * (radius * 71492 * 10^5)^3)), 
+              meanMass = mean(mass/.00315),
+              medianDensity = median((mass * 1.9 * 10^30)/((4/3) * 
+                                  pi * (radius * 71492 * 10^5)^3)),
+              medianMass = median(mass/.00315))
+
+# Propgating errors for density, to be done if theres time. Symbolic math in R is ... different. 
+
+
+# plotting data
+denPlot <- ggplot(dataFrameDensity, aes(x = mass/.00315, 
+                                        y = (mass * 1.9 * 10^30)/((4/3) * 
+                                        pi * (radius * 71492 * 10^5)^3), 
+                                        fill = star_Spectral)) +
+  geom_point(shape = 21) +
+  geom_errorbarh(aes(xmin = mass/.00315 - mass_error_min/.00315, 
+                     xmax = mass/.00315 + mass_error_max/.00315), size = 1, 
+                 alpha = .4, color = "Grey45", show.legend = F) +
+  geom_hline(yintercept = .1785, linetype = "dashed") +
+  geom_text(aes(.2,.24,label = "Helium", vjust = -1)) +
+  geom_hline(yintercept = 19.3, linetype = "dashed") +
+  geom_text(aes(.2, 25, label = "Gold", vjust = -1)) +
+  geom_hline(yintercept = 5.51, linetype = "dashed") +
+  geom_text(aes(.2, 7, label = "Earth", vjust = -1)) +
+  geom_hline(yintercept = 1.33, linetype = "dashed") +
+  geom_text(aes(.2, 1.7, label = "Jupiter", vjust = -1)) +
+  scale_x_continuous(trans = "log10") +
+  scale_y_continuous(trans = "log10") +
+  xlab("\nMass (Relative to Earth)") +
+  ylab("Density (g/cm^3)\n") +
+  ggtitle("Mass vs Density of Exoplanets by Spectral Class\n") +
+  geom_point(data = meanDen, aes(x = meanMass, y = meanDensity, 
+                                 fill = star_Spectral), shape = 25, 
+             size = 3) +
+  geom_point(data = meanDen, aes(x = medianMass, y = medianDensity, 
+                                 fill = star_Spectral), 
+             shape = 23, size = 3)
+
+
+
+ggplotly(denPlot) %>%
+  layout(legend = list(x = 0.01, y = 0.95), annotations = 
+         list(x = 1, y = 0, text = "Inverted Triangles = Mean ||
+                                    Diamonds = Median ||", 
+         showarrow = F, xref='paper', yref='paper', 
+         xanchor='right', yanchor='auto', xshift=0, yshift=0,
+         font=list(size=13, color="Black")))
+```
+
+
+## Exploratory Analysis Continued
+- Mass appears to corelate with radius up until around Jupiter mass. At which point there is an inflection point where mass contuines to increase without an increase in radius. This can be seen clearly on the density plot. 
+- Very few exoplanets with an Earth type radius and mass. Most appear around M class stars, which are not conducive to life.
+- A few "super Earths" around K and M type stars.
+- Most exoplanets are gas giants. 
+- Interesting outliers, with unbelieveable densities. 
+
+## Exploratory Analysis Continued
+- Do exoplanets follow Keplers third law? $T^2 \propto a^3$ Where T is the orbital period and a is the semi-major axis?  
+    + We predict we should see a relationship between orbital period and semi major axis, as physics is space invariant. 
+    
+## Exploratory Analysis Continued
+- *Background*
+    + A semi-major axis is one half of the major axis, and thus runs from the center, through a focus, and ends at the perimeter of an ellipse.
+    + AU is an astronomical unit. 1AU is roughly the distance of the Earth from the sun. 
+
+## Exploratory Analysis Continued
+
+```{r}
+dataFrameSemiMajor <- planetDf%>%
+  select(orbital_period, semi_major_axis, star_Spectral, mass,
+         orbital_period_error_max, orbital_period_error_min, 
+         semi_major_axis_error_max,
+         semi_major_axis_error_min)%>%
+    filter(semi_major_axis_error_min & semi_major_axis_error_max &
+             orbital_period_error_min & orbital_period_error_max > 0  & 
+             semi_major_axis_error_min & semi_major_axis_error_max &
+             orbital_period_error_min & orbital_period_error_max < 10^100 &
+             orbital_period > orbital_period_error_min 
+           & semi_major_axis > semi_major_axis_error_min) %>%
+      na.omit() 
+
+meanSemiMajor <- dataFrameSemiMajor %>%
+  group_by(star_Spectral) %>%
+    summarise(meanOrbital = mean(orbital_period/365.25), 
+              meanSemiMajor = mean(semi_major_axis),
+              medianOrbital = median(orbital_period/365.25),
+              medianSemiMajor = median(semi_major_axis))
+
+semiMajorPlot <- ggplot(dataFrameSemiMajor, aes(x = orbital_period/365.25, 
+                                    y = semi_major_axis, 
+                                    fill = star_Spectral, 
+                                    size = mass/.00315)) +
+     geom_point(shape = 21) +
+     geom_errorbar(aes(ymin = (semi_major_axis) -  
+                              (semi_major_axis_error_min), 
+                       ymax = (semi_major_axis) + 
+                              semi_major_axis_error_max), size = 1,
+                   alpha = .4, show.legend = F, color = "Grey45") + 
+     geom_errorbarh(aes(xmin = (orbital_period/365.25) - 
+                               (orbital_period_error_min/365.25), 
+                        xmax = (orbital_period/365.25) + 
+                               (orbital_period_error_max/365.25)),
+                    size = 1, alpha = .4, show.legend = F, color = "Grey45") +
+     geom_point(data = meanSemiMajor, 
+                aes(y = (meanSemiMajor), 
+                    x = (meanOrbital), fill = star_Spectral), 
+                size = 3, shape = 25, show.legend = F) +
+     geom_point(data = meanSemiMajor, 
+                aes(y = (medianSemiMajor), 
+                    x = (medianOrbital), fill = star_Spectral), 
+                size = 3, shape = 23, show.legend = F) +
+     scale_y_continuous(trans = "log10",
+                        name = "Semi Major Axis (AU)\n") +
+     scale_x_continuous(trans = "log10",
+                        name = "\nOrbital Period (Years)") +
+     labs(title = "Orbital Period vs 
+                   Semi Major Axis by Star Spectral Class\n") +
+     scale_size_continuous(guide = FALSE)
+
+ggplotly(semiMajorPlot) %>%
+  layout(legend = list(x = 0.01, y = 0.95), annotations = 
+  list(x = 1, y = 0, text = "|| Point Size = Mass (Rel to Earth) || Inverted Triangles = Mean || Diamonds = Median ||", 
+  showarrow = F, xref='paper', yref='paper', 
+  xanchor='right', yanchor='auto', xshift=0, yshift=0,
+  font=list(size=13, color="Black")))
+```
+
+## Exploratory Analysis Continued
+```{r}
+meanSemiMajor <- meanSemiMajor %>%
+  rename("Star Spectral Type" = star_Spectral, "Mean Orbit (Years)" = meanOrbital, "Mean semi-major axis (AU)" = meanSemiMajor, "Median Orbit (Years)" = medianOrbital, "Median semi-major axis (AU)" = medianSemiMajor) %>%
+  mutate(meanRatio = (`Mean Orbit (Years)`)^2 / 
+           (`Mean semi-major axis (AU)`)^3) %>%
+  mutate(medianRatio = ((`Median Orbit (Years)`)^2 / 
+           (`Median semi-major axis (AU)`)^3))
+
+kable(meanSemiMajor, "html", booktabs = T) %>%
+  kable_styling(position = "center")
+```
+
+## Exploratory Analysis Continued
+- The ratio test $\frac{T^2}{a^3}$ of the mean produces values that are in poor agreement with Earths solar system of ~1. However, the median values produce a ratio that is probably within the uncertainty of ~1 for the majority of spectral classes. 
+- Outliers are interesting though. M class stars are the least massive of the main sequence stars. It's possible N-body interactions here are more important due to their smaller mass.
+- Mean or Median orbital periods don't seem to correlate nicely with star spectral type, as we expected. This could be a result of detection bias.
+
+## Exploratory Analysis Continued
+- Do some star spectral types have more exoplanets than others? 
+    + We predict that more massive star spectral types should have a larger share of the exoplanets detected, as they have a stronger gravitational force and formed from more intial material. 
+
+## Exploratory Analysis Continued
+
+```{r}
+starTypeDf <- planetDf %>% 
+  select(star_Spectral) %>% 
+  count(star_Spectral) %>%
+  na.omit()
+
+
+ ggplot(starTypeDf) +
+  geom_bar(aes(x = factor(star_Spectral), 
+               fill = factor(star_Spectral), 
+               y = n), stat = "identity") +
+  scale_fill_brewer(palette = "Pastel1", direction = -1, 
+                     name = "Star Spectral Class") +
+  ggtitle("Spectral Class of Star vs Number of Planets \n") +
+  ylab("Number Of Planets \n") +
+  xlab("\nStar Spectral Class") +
+  coord_polar(theta = "x") 
+```
+
+
+## Exploratory Analysis Continued
+
+- We don't see any correlation based on star spectral type and number of exoplanets. More G and K class exoplanets have been identified than any other spectral type. A and B spectral types have vanishingly few of the detected exoplanets, which is the opposite of what we predicted. 
+- This could be due to a selection bias, with astronomers targeting potentially habitual star systems over O, B and A star types. 
+- Also, there are fewer A, B, and O type stars, as stars get more massive they become less numerous. 
+- However, one would expect in that case that M class stars should be the most frequent. They also have few exoplanets identified than either K or G types.
+
+## Exploratory Analysis Continued
+- Do sun massed stars and larger have planets with nearly flat inclinations? 
+    + Based on our solar system, we believe this should be the case. One, since stars as large as our are generally very massive they should have planets orbiting nearly flat to their equator. Two, we predict the solar system is good model as an "average" throughout the galaxy. 
+    
+## Exploratory Analysis Continued
+
+![Orbital Inclination](inclination.png)
+
+
+## Exploratory Analysis Continued
+- *Background*
+    + Orbital inclination is the minimum angle between a reference plane and the orbital plane or axis of direction of an object in orbit around another object.
+
+## Exploratory Analysis Continued
+
+```{r}
+# Cleaning the data for this plot
+dataFrameInclination <- planetDf %>%
+  select(lambda_angle, lambda_angle_error_min, 
+         lambda_angle_error_max, star_mass, 
+         star_mass_error_min, star_mass_error_max, mass, mass_error_min,
+         mass_error_max, detection_type)%>%
+    filter(lambda_angle_error_min & lambda_angle_error_max &
+           star_mass_error_min & star_mass_error_max > 0  & 
+           lambda_angle_error_min &
+           star_mass_error_min  < 10^100 &
+           lambda_angle > lambda_angle_error_min 
+           & star_mass > star_mass_error_min &
+           lambda_angle + lambda_angle_error_max < 360) %>% 
+      na.omit()
+# Finding mean and median of data
+meanInc <- dataFrameInclination %>%
+  group_by(detection_type) %>%
+    summarise(meanInc = mean(lambda_angle), 
+              meanStarMass = mean(star_mass),
+              medianInc = median(lambda_angle),
+              medianStarMass = median(star_mass))
+#plotting data
+incPlot <- ggplot(dataFrameInclination, aes(x = star_mass, y = lambda_angle)) +
+  geom_point(data = meanInc, aes(x = meanStarMass, y = meanInc, 
+                                 fill = detection_type), shape = 25, 
+             size = 3, alpha = .4, show.legend = F) +
+  geom_point(data = meanInc, aes(x = medianStarMass, y = medianInc, 
+                                 fill = detection_type), 
+             shape = 23, size = 3, alpha = .4, show.legend = F ) +
+  geom_point(aes(size = mass, fill = detection_type), shape = 21) +
+  guides(size = guide_legend("Planet Mass (Relative to Jupiter)")) +
+  scale_fill_discrete(name = "Detection Method") +
+  scale_x_continuous(limits = c(.2, 2.2)) +
+  scale_y_continuous(limits = c(0, 360), 
+                     breaks = seq(0, 360, by = 45)) +
+  theme_minimal() +
+  geom_errorbar(aes(ymin = lambda_angle - lambda_angle_error_min, 
+                    ymax = lambda_angle + lambda_angle_error_max), 
+                alpha = .5, show.legend = F, color = "Grey45") + 
+  geom_errorbarh(aes(xmin = star_mass - star_mass_error_min, 
+                     xmax = star_mass + star_mass_error_max), 
+                 alpha = .5, show.legend = F, color = "Grey45") +
+  coord_polar(theta = "y") +
+  xlab("Stellar Mass (Relative to the Sun)\n") +
+  ylab("\nInclination Angle (Spin Orbit Angle, Degrees)") +
+  labs(caption = "Mean = Inverted Triangle || Median = Diamond") +
+  ggtitle("Polar Plot of Inclination angle and Stellar Mass\n")
+  
+
+incPlot
+  
+
+```
+
+## Exploratory Analysis Continued
+
+- Flat inclinations don't appear to the prevalent. Further, star mass seems to have little bearing on planet orbital inclinations. 
+- Not a lot of exoplanets have inclination data, n = 32. So hard to make any accurate statements. 
+- It's possible that the exoplanets with inclination angles suffer from selection bias, in that astronomers are looking more at "odd" planetary systems.
+- Planet mass relative to Jupiter also doesn't appear to predict inclination angles, unlike our solar system where low mass planetary bodies like mercury suffer from inclined orbits. 
+- In the future, it might be interesting to look at orbital period as well. 
+
+## Exploratory Analysis Continued
+
+- Do orbital eccentricities match that of the solar system? Do they vary based on the distance from the central star?
+    + We predicted that generally for most exoplanets the the further away from their host the lower their eccentricity up to about 10 AU in which eccentricity would increase. We also predicted that planets with orbits sub .5 AU would experince greater eccentricity than those between .5 and 10 AU.  
+
+## Exploratory Analysis Continued
+![Orbital eccentricity of .5](ecc.gif)
+
+## Exploratory Analysis Continued
+- *Background*
+    + Orbital eccentricity determines how elliptical an orbit is. A circle is an ellipse with an eccentricity of 0. While the gif demonstrated an eccentricity of .5. Eccentricity is a number between 0 and 1 for an elliptical orbit. 
+    + Solar system planets have eccentricity near 0, with Mercury having the highest at .206.
+    + The semi-minor axis can be calculated with a known eccentricity by the expression $b = a\sqrt(1 - e^2)$
+
+## Exploratory Analysis Continued
+
+```{r}
+# Cleaning data for plot
+dataFrameOrbit <- planetDf %>%
+  select(eccentricity, eccentricity_error_min, 
+         eccentricity_error_max, semi_major_axis, 
+         semi_major_axis_error_min, semi_major_axis_error_max)%>%
+    filter(semi_major_axis_error_min & semi_major_axis_error_max &
+           eccentricity_error_min & eccentricity_error_max > 0  & 
+           eccentricity_error_max &
+           semi_major_axis_error_max  < 10^100 &
+           semi_major_axis > semi_major_axis_error_min 
+           & eccentricity > eccentricity_error_min) %>%
+      na.omit() 
+
+# Breaking data into smaller chunks to improve ease of visualization
+
+dataFrameOrbitDim <- dataFrameOrbit %>%
+  filter(semi_major_axis <= .1)
+
+dataFrameOrbitTiny <- dataFrameOrbit %>%
+  filter(semi_major_axis > .1 & semi_major_axis <=.5)
+
+dataFrameOrbitSmall <- dataFrameOrbit %>%
+  filter(semi_major_axis <= 1 & semi_major_axis > .5)
+
+dataFrameOrbitMed <- dataFrameOrbit %>%
+  filter(semi_major_axis > 1 & semi_major_axis <= 4)
+
+dataFrameOrbitLarge <- dataFrameOrbit %>%
+  filter(semi_major_axis > 4 & semi_major_axis <= 10)
+
+dataFrameOrbitHuge <- dataFrameOrbit %>%
+  filter(semi_major_axis > 10)
+
+# Finding mean and median for each group
+
+meanOrbitDim <- dataFrameOrbitDim %>%
+    summarise(meanEcc = mean(eccentricity), 
+              meanSemiMajor = mean(semi_major_axis),
+              medianEcc = median(eccentricity),
+              medianSemiMajor = median(semi_major_axis))
+
+meanOrbitTiny <- dataFrameOrbitTiny %>%
+    summarise(meanEcc = mean(eccentricity), 
+              meanSemiMajor = mean(semi_major_axis),
+              medianEcc = median(eccentricity),
+              medianSemiMajor = median(semi_major_axis))
+
+meanOrbitSmall <- dataFrameOrbitSmall %>%
+    summarise(meanEcc = mean(eccentricity), 
+              meanSemiMajor = mean(semi_major_axis),
+              medianEcc = median(eccentricity),
+              medianSemiMajor = median(semi_major_axis))
+
+meanOrbitMed <- dataFrameOrbitMed %>%
+    summarise(meanEcc = mean(eccentricity), 
+              meanSemiMajor = mean(semi_major_axis),
+              medianEcc = median(eccentricity),
+              medianSemiMajor = median(semi_major_axis))
+
+meanOrbitLarge <- dataFrameOrbitLarge %>%
+    summarise(meanEcc = mean(eccentricity), 
+              meanSemiMajor = mean(semi_major_axis),
+              medianEcc = median(eccentricity),
+              medianSemiMajor = median(semi_major_axis))
+
+meanOrbitHuge <- dataFrameOrbitHuge %>%
+    summarise(meanEcc = mean(eccentricity), 
+              meanSemiMajor = mean(semi_major_axis),
+              medianEcc = median(eccentricity),
+              medianSemiMajor = median(semi_major_axis))
+
+# Plotting data per group
+
+ecc1 <- ggplot(dataFrameOrbitDim) +
+  geom_ellipse(aes(x0 = 0, y0 = 0, a = semi_major_axis, b = (
+    semi_major_axis * sqrt(1 - eccentricity^2)), 
+    angle = 0, color = eccentricity)) + 
+  scale_colour_gradient(name = "Eccentricity", 
+                        low = "blue", high = "red") +
+  geom_ellipse(data = meanOrbitDim, 
+               aes(x0 = 0, y0 = 0, a = meanSemiMajor, b = (
+    meanSemiMajor * sqrt(1 - meanEcc^2)), 
+    angle = 0)) +
+  coord_fixed() +
+  xlab("\nDistance (AU)") +
+  ylab("Distance (AU)\n") + 
+  labs(caption = "Mean Orbital in Black") +
+  ggtitle("Semi Major Axis <= .1\n")
+
+ecc2 <- ggplot(dataFrameOrbitTiny) +
+  geom_ellipse(aes(x0 = 0, y0 = 0, a = semi_major_axis, b = (
+    semi_major_axis * sqrt(1 - eccentricity^2)), 
+    angle = 0, color = eccentricity)) + 
+  scale_colour_gradient(name = "Eccentricity", 
+                        low = "green", high = "brown") +
+  geom_ellipse(data = meanOrbitTiny, 
+               aes(x0 = 0, y0 = 0, a = meanSemiMajor, b = (
+    meanSemiMajor * sqrt(1 - meanEcc^2)), 
+    angle = 0)) + 
+  coord_fixed() +
+  xlab("\nDistance (AU)") +
+  ylab("Distance (AU)\n") +
+  labs(caption = "Mean Orbital in Black") +
+  ggtitle("Semi Major Axis > .1 & <= .5\n")
+
+ecc3 <- ggplot(dataFrameOrbitSmall) +
+  geom_ellipse(aes(x0 = 0, y0 = 0, a = semi_major_axis, b = (
+    semi_major_axis * sqrt(1 - eccentricity^2)), 
+    angle = 0, color = eccentricity)) +
+  scale_colour_gradient(name = "Eccentricity", 
+                        low = "blue", high = "red") +
+  geom_ellipse(data = meanOrbitSmall, 
+               aes(x0 = 0, y0 = 0, a = meanSemiMajor, b = (
+    meanSemiMajor * sqrt(1 - meanEcc^2)), 
+    angle = 0)) +
+  coord_fixed() +
+  xlab("\nDistance (AU)") +
+  ylab("Distance (AU)\n") + 
+  labs(caption = "Mean Orbital in Black") +
+  ggtitle("Semi Major Axis > .5 & <= 1\n")
+
+ecc4 <- ggplot(dataFrameOrbitMed) +
+  geom_ellipse(aes(x0 = 0, y0 = 0, a = semi_major_axis, b = (
+    semi_major_axis * sqrt(1 - eccentricity^2)), 
+    angle = 0, color = eccentricity)) +
+  scale_colour_gradient(name = "Eccentricity", 
+                        low = "green", high = "brown") +
+  geom_ellipse(data = meanOrbitMed, 
+               aes(x0 = 0, y0 = 0, a = meanSemiMajor, b = (
+    meanSemiMajor * sqrt(1 - meanEcc^2)), 
+    angle = 0)) +
+  coord_fixed() +
+  xlab("\nDistance (AU)") +
+  ylab("Distance (AU)\n") + 
+  labs(caption = "Mean Orbital in Black") +
+  ggtitle("Semi Major Axis > .1 & <= 4\n")
+
+ecc5 <- ggplot(dataFrameOrbitLarge) +
+  geom_ellipse(aes(x0 = 0, y0 = 0, a = semi_major_axis, b = (
+                  semi_major_axis * sqrt(1 - eccentricity^2)), 
+                  angle = 0, color = eccentricity)) +
+  scale_colour_gradient(name = "Eccentricity", 
+                        low = "blue", high = "red") +
+  geom_ellipse(data = meanOrbitLarge, 
+               aes(x0 = 0, y0 = 0, a = meanSemiMajor, b = (
+    meanSemiMajor * sqrt(1 - meanEcc^2)), 
+    angle = 0)) +
+   coord_fixed() +
+   xlab("\nDistance (AU)") +
+   ylab("Distance (AU)\n") + 
+   labs(caption = "Mean Orbital in Black") +
+   ggtitle("Semi Major Axis > 4 & <= 10\n")
+  
+ecc6 <- ggplot(dataFrameOrbitHuge) +
+  geom_ellipse(aes(x0 = 0, y0 = 0, a = semi_major_axis, b = (
+                  semi_major_axis * sqrt(1 - eccentricity^2)), 
+                  angle = 0, color = eccentricity)) +
+  scale_colour_gradient(name = "Eccentricity", 
+                        low = "green", high = "brown") +
+  geom_ellipse(data = meanOrbitHuge, 
+               aes(x0 = 0, y0 = 0, a = meanSemiMajor, b = (
+    meanSemiMajor * sqrt(1 - meanEcc^2)), 
+    angle = 0)) +
+  coord_fixed(xlim = c(-110,110), ylim = c(-110,110)) +
+  xlab("\nDistance (AU)") +
+  ylab("Distance (AU)\n") + 
+  labs(caption = "Mean Orbital in Black") +
+  ggtitle("Semi Major Axis > 10\n")
+
+grid.arrange(ecc1, ecc2, ncol = 2)
+```
+
+
+## Exploratory Analysis Continued
+
+```{r}
+grid.arrange(ecc3, ecc4, ncol = 2)
+```
+
+
+## Exploratory Analysis Continued
+
+```{r}
+grid.arrange(ecc5, ecc6, ncol = 2)
+```
+
+## Exploratory Analysis Continued
+```{r}
+meanOrbitDim <- meanOrbitDim %>%
+  rename("Mean Ecc, SMA <= .1" = meanEcc, "Mean Semi Major" = meanSemiMajor,
+         "Median Ecc" = medianEcc, "Median Semi Major" = medianSemiMajor)
+meanOrbitTiny <- meanOrbitTiny %>%
+  rename("Mean Ecc, SMA > .1 <= .5" = meanEcc, "Mean Semi Major" = meanSemiMajor,
+         "Median Ecc" = medianEcc, "Median Semi Major" = medianSemiMajor)
+meanOrbitSmall <- meanOrbitSmall %>%
+  rename("Mean Ecc, SMA > .5 <= 1" = meanEcc, "Mean Semi Major" = meanSemiMajor,
+         "Median Ecc" = medianEcc, "Median Semi Major" = medianSemiMajor)
+meanOrbitMed <- meanOrbitMed %>%
+  rename("Mean Ecc, SMA > 1 <= 4" = meanEcc, "Mean Semi Major" = meanSemiMajor,
+         "Median Ecc" = medianEcc, "Median Semi Major" = medianSemiMajor)
+meanOrbitLarge <- meanOrbitLarge %>%
+  rename("Mean Ecc, SMA > 4 <= 10" = meanEcc, "Mean Semi Major" = meanSemiMajor,
+         "Median Ecc" = medianEcc, "Median Semi Major" = medianSemiMajor)
+meanOrbitHuge <- meanOrbitHuge %>%
+  rename("Mean Ecc, SMA > 10" = meanEcc, "Mean Semi Major" = meanSemiMajor,
+         "Median Ecc" = medianEcc, "Median Semi Major" = medianSemiMajor)
+
+kable(meanOrbitDim, "html", booktabs = T) %>%
+  kable_styling(position = "center")
+kable(meanOrbitTiny, "html", booktabs = T) %>%
+  kable_styling(position = "center")
+kable(meanOrbitSmall, "html", booktabs = T) %>%
+  kable_styling(position = "center")
+kable(meanOrbitMed, "html", booktabs = T) %>%
+  kable_styling(position = "center")
+kable(meanOrbitLarge, "html", booktabs = T) %>%
+  kable_styling(position = "center")
+kable(meanOrbitHuge, "html", booktabs = T) %>%
+  kable_styling(position = "center")
+```
+
+## Exploratory Analysis Continued
+
+- Somewhat counter intuitively, both the mean and median eccentricity seem to scale with orbital distance. This is directly opposite of our own solar system where Kupier belt objects and Mercury have the highest eccentricity. 
+- Hard to explain given what we think about planetary formation. 
+
+## Conclusion 
+
+- If we had more time, it would be interesting to compare the differences between observed and calculated temperatures of exoplanets.
+- It would be interesting to look more at the inclination of some of the planets orbits to see if there is any kind of relationship there, maybe by comparing it star spectral type or orbital distance. 
+- It would also be interesting to dig further into planetary eccentricities, because they're hard to explain. Maybe if we broke it down further into planetary masses and see if there was any relationship there.
+
+
+## Conclusion 
+
+- To test the accuracy of our current methods. We would also have liked to examine the chemical compositions of the different exoplanets. This would give us an insight to the most common chemicals in the atmospheres of other planets and determine if said planet has an atmosphere capable of sustaining life.
+- Other data sets that might be useful are astronomical models we could use to map onto the data to determine exoplanet possible habituality.
+
+
+
